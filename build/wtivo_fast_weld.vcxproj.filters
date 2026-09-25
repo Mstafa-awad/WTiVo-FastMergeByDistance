@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\super\OneDrive\Desktop\ComfyUI-Easy-Install\ComfyUI\custom_nodes\WTiVo-FastMergeByDistance\cpp\wtivo_fast_weld.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\super\OneDrive\Desktop\ComfyUI-Easy-Install\ComfyUI\custom_nodes\WTiVo-FastMergeByDistance\cpp\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{43732C6E-5665-303B-8898-229E6611C5CC}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
