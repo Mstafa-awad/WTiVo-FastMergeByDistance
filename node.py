@@ -16,7 +16,7 @@ from .native import native_available, native_thread_count, native_weld
 from .python_weld import python_weld
 
 LOGGER = logging.getLogger("WTiVo-FastMergeByDistance")
-VERSION = "7.0.0"
+VERSION = "8.0.0"
 
 # glTF constants.
 CHUNK_JSON = 0x4E4F534A
@@ -643,6 +643,19 @@ def _primitive_is_watertight(glb: GLB, primitive: dict[str, Any]) -> tuple[bool,
     return ok, stats, vertices, faces
 
 
+def _adaptive_distance_step(base_step: float, face_count: int) -> float:
+    """Choose a safer retry increment for mesh size.
+
+    Large meshes are more sensitive to over-welding, so use a smaller increment.
+    Smaller meshes keep the normal user-entered increment.
+    """
+    if face_count >= 1_000_000:
+        return base_step * 0.25
+    if face_count >= 250_000:
+        return base_step * 0.5
+    return base_step
+
+
 class WTiVoFastMergeByDistance:
     @classmethod
     def INPUT_TYPES(cls):
@@ -668,6 +681,11 @@ class WTiVoFastMergeByDistance:
                 ),
                 "remove_degenerate": ("BOOLEAN", {"default": True}),
                 "topology_mode": (["TEXTURE_SAFE", "STRICT_BLENDER"], {"default": "TEXTURE_SAFE"}),
+                "adaptive_retry_step": ("BOOLEAN", {
+                    "default": True,
+                    "label_on": "Auto step by polygon count",
+                    "label_off": "Use exact entered step",
+                }),
             },
             "optional": {
                 "max_attempts": (
@@ -685,7 +703,8 @@ class WTiVoFastMergeByDistance:
         "CPU geometric watertight welding for GLB meshes. Separates geometric "
         "closure from glTF render-vertex seams, skips meshes that are already "
         "geometrically closed, and retries distance as step, 2x step, 3x step... "
-        "without treating UV seam duplicates as broken geometry."
+        "without treating UV seam duplicates as broken geometry. Failed retries never "
+        "crash the workflow; the exact original GLB is returned instead."
     )
 
     def execute(
@@ -695,6 +714,7 @@ class WTiVoFastMergeByDistance:
         centroid_merge: bool = False,
         remove_degenerate: bool = True,
         topology_mode: str = "TEXTURE_SAFE",
+        adaptive_retry_step: bool = True,
         max_attempts: int = 100,
     ):
         start = time.perf_counter()
@@ -776,9 +796,19 @@ class WTiVoFastMergeByDistance:
             last_stats: dict[str, int] = {}
             last_geo_stats: dict[str, int] = {}
             accepted_meta = None
+            retry_step = (
+                _adaptive_distance_step(distance_step, before_f)
+                if adaptive_retry_step else distance_step
+            )
+            if adaptive_retry_step and retry_step != distance_step:
+                LOGGER.info(
+                    "[WTiVo Fast Merge] mesh=%d primitive=%d adaptive retry step=%g "
+                    "(base=%g, faces=%s)",
+                    mesh_index, prim_index, retry_step, distance_step, f"{before_f:,}"
+                )
 
             for attempt in range(1, max_attempts + 1):
-                distance = distance_step * attempt
+                distance = retry_step * attempt
                 (
                     new_vertices,
                     new_faces,
@@ -870,16 +900,24 @@ class WTiVoFastMergeByDistance:
                     break
 
             if not solved:
-                raise RuntimeError(
-                    "WTiVo Fast Merge by Distance could not make "
-                    f"mesh {mesh_index}, primitive {prim_index} watertight after "
-                    f"{max_attempts} attempts. Last distance="
-                    f"{distance_step * max_attempts:g}; strict_bad_edges="
-                    f"{last_stats.get('bad_edge_groups', -1)}; strict_bad_fans="
-                    f"{last_stats.get('bad_vertex_fans', -1)}; "
-                    f"geometric_bad_edges={last_geo_stats.get('bad_edge_groups', -1)}; "
-                    f"geometric_bad_fans={last_geo_stats.get('bad_vertex_fans', -1)}."
+                last_distance = retry_step * max_attempts
+                LOGGER.warning(
+                    "[WTiVo Fast Merge] NOT WATERTIGHT | mesh=%d primitive=%d "
+                    "after %d attempts | last_distance=%g | "
+                    "strict_bad_edges=%d strict_bad_fans=%d | "
+                    "geometric_bad_edges=%d geometric_bad_fans=%d | "
+                    "RETURNING ORIGINAL GLB UNCHANGED",
+                    mesh_index, prim_index, max_attempts, last_distance,
+                    last_stats.get("bad_edge_groups", -1),
+                    last_stats.get("bad_vertex_fans", -1),
+                    last_geo_stats.get("bad_edge_groups", -1),
+                    last_geo_stats.get("bad_vertex_fans", -1),
                 )
+                LOGGER.info(
+                    "[WTiVo Fast Merge] No partial result is emitted when watertight "
+                    "closure fails; the exact input bytes are returned."
+                )
+                return (Types.File3D(source=io.BytesIO(original_bytes), file_format="glb"),)
 
         # Final report deliberately distinguishes the two notions of topology.
         # A texture-safe GLB can have render-vertex seam duplicates even though

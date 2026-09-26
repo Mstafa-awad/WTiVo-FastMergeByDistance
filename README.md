@@ -1,8 +1,8 @@
-# WTiVo Fast Merge by Distance v7
+# WTiVo Fast Merge by Distance v8
 
 Fast CPU vertex welding for ComfyUI GLB meshes after QMesh/decimation.
 
-## v1: important detials
+## v7: important changes
 
 - The native C++ core now uses **OpenMP multi-threading** for the expensive spatial-hash candidate search.
 - The node reports the detected native thread count.
@@ -48,41 +48,17 @@ Without the DLL, the Python fallback is used and will be slower.
 This project's original source is MIT licensed and commercially usable. See `LICENSE`.
 
 
+## v8 safety behavior
 
----
+If the mesh cannot be made watertight within `max_attempts`, the node does not
+throw an exception and does not emit a partially modified mesh. It logs the
+remaining topology errors and returns the **exact original GLB bytes unchanged**.
 
-## 🚀 SUPPORT MOSTAADTECH
+`adaptive_retry_step` is enabled by default. For large meshes the retry increment
+is reduced automatically to reduce the risk of over-welding:
 
-### ❤️ Enjoying this project / workflow?
+- under 250,000 triangles: entered increment is used
+- 250,000 to 999,999 triangles: 50% of the entered increment
+- 1,000,000+ triangles: 25% of the entered increment
 
-I'm **MostAadTech**, I create FREE ComfyUI workflows, local AI tools, 3D pipelines, and open-source projects.
-
-If this project or workflow helped you, **please consider following me or supporting my work**. It helps me keep building, testing, and releasing more free tools and workflows.
-
----
-
-## 💜 Support Me on Patreon
-
-👉 **[Support MostAadTech on Patreon](https://www.patreon.com/cw/MostafaAwad/membership)**
-
-Your support helps me spend more time developing **FREE AI tools, ComfyUI workflows, and 3D pipelines**.
-
----
-
-## 🌐 Follow MostAadTech
-
-* ▶️ **[YouTube](https://www.youtube.com/@MostAadTech)** — Tutorials, workflows & AI projects
-* 📸 **[Instagram](https://www.instagram.com/mostaadtech/)** — Projects, updates & behind the scenes
-* 𝕏 **[X / Twitter](https://x.com/MostAadTech)** — Updates, releases & experiments
-* 💻 **[GitHub](https://github.com/Mstafa-awad)** — Open-source projects & code
-
----
-
-### ⭐ One Follow Helps
-
-**Follow • Star • Share • Support**
-
-Every follow, GitHub star, share, and Patreon supporter helps me continue making **FREE tools for the AI community.**
-
-**Thank you for supporting MostAadTech! ❤️**
-
+Disable this option to use the entered increment exactly.
